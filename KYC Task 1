@@ -1,0 +1,386 @@
+# KYC Task 1
+# program to extract information about companies in Bath from Company House data
+# M Thorpe 07/01/2019
+
+# import modules
+import pandas as pd
+import requests as rq
+
+# define functions
+def add_replace(A,B):  # function to add an extra space and replace all spaces with '+'
+    for i in A:
+        j = i+' '
+        k = j.replace(' ','+')
+        l = k.replace('&', '')
+        B.append(l)
+        
+def replace(A,B):  # function to replace all spaces with '+'
+    for i in A:
+        k = i.replace(' ','+')
+        B.append(k)
+        
+def longestword(string): # function to return longest word in a string
+    length = 0
+    # Finding longest word in sentence 
+    for word in string.split(): 
+        if len(word) > length: 
+            length = len(word)
+    for word in string.split():
+        if length == len(word):
+            return word
+            
+def append(A,B,C,D,E,F,G,H,I,J): # function to append items into DataFrame
+    A.append(B)
+    C.append(D)
+    E.append(F)
+    G.append(H)
+    I.append(J)
+    
+# read excel document 'Bath_Sample_CDD_Jun20' and create variables
+df = pd.read_excel(r'C:/Users/mthor/Documents/Bath_Sample_CDD_Jun20.xlsx', 'Sample- Bath')
+name = df['Name'].tolist() # Company Name
+postcode = df['PostCode'].tolist() # Company Postcode
+street = df['Street'].tolist() # Street of Company
+streetno = df['StreetNo'].tolist()
+unit = df['Unit'].tolist()
+building = df['Building'].tolist()
+careof = df['CareOf'].tolist()
+
+name1 = [] # Empty Company Name
+street1 = [] # Empty Company Street
+postcode1 = [] # Empty Company Postcode
+onewordname = [] # Empty Company one word Name
+
+firstword = list(map(lambda x: x.split(' ')[0].upper(), name)) # Create list of first word names
+lastword = list(map(lambda x: x.split(' ')[-1].upper(), name)) # Create list of last word names
+
+for i in range(len(name)): # Create list of one words names
+    b = longestword(name[i]).upper()
+    onewordname.append(b)
+    onewordname[i].upper()
+
+for i in range(len(streetno)): # Combine street numbers to form 'premises'
+    if type(streetno[i]) == float:
+       streetno[i] = unit[i]
+       if type(streetno[i]) ==float:
+           streetno[i] = building[i]
+           if type(streetno[i]) ==float:
+               streetno[i] = careof[i]
+               continue
+
+# Create new variables so terms can be searched for in API
+add_replace(name,name1)
+replace(postcode,postcode1)
+address = [i + j for i, j in zip(name1,postcode1)] # Full Address using Name and Postcode
+
+url = "https://api.companieshouse.gov.uk/search/companies?q=" # Base url
+api = 'API' # API KEY
+url1 = "&items_per_page=5" # Number of items per page limit
+url2 = "https://api.companieshouse.gov.uk/company/" # New base url for search 2 and 3
+url3 = "/officers" # Officer search url term
+url4 = "/persons-with-significant-control" # PSC search term
+
+company_name = [] # Empty array for companies names using orginal search names in name
+company_title = [] # Empty array for company names found in search
+company_no = [] # Empty array for corresponding company numbers found in search
+company_type = [] # Empty array for corresponding company types found in search
+company_status = [] # Empty array for company status
+
+# Loop to search API and create Company Information DataFrame
+for i, w in enumerate(address):
+    
+    url_full = url+w+url1
+    re = rq.get(url_full, auth=(api, '')).json()
+    record_search = {'Original Company Name': company_name,
+            'Company Name Found': company_title,
+            'Company Number': company_no,
+            'Company Type': company_type,
+            'Company Status': company_status}
+
+    try:
+        for j in range(3): # for loop to return first 3 matches
+            re1 = re['items'][j]['title']
+            re2 = re['items'][j]['company_number'] 
+            re3 = re['items'][j]['address']['postal_code']
+            re4 = re['items'][j]['address']['address_line_1']
+            re5 = re['items'][j]['address']['premises']
+            re6 = re['items'][j]['address']['locality']
+            re7 = re['items'][j]['company_type']
+            re8 = re['items'][j]['company_status']
+            
+            if 'Bath' in re6:
+                
+                if re3 == postcode[i]:
+                    if streetno[i] in re5:
+                        if onewordname[i] in re1 or firstword[i] in re1 or lastword[i] in re1:
+                            append(company_title,re1,company_no,re2,company_name,name[i],company_type,re7,company_status,re8)
+                            break
+
+                        else:
+                            print('The company is in bath and at the right premises. Name searched: ',name[i], 'Name found: ',re1)
+                            question = input('Is this the correct company? (y/n)')
+                            if question == 'y':
+                                append(company_title,re1,company_no,re2,company_name,name[i],company_type,re7,company_status,re8)
+                                break                        
+                    
+                    elif onewordname[i] in re1:
+                        append(company_title,re1,company_no,re2,company_name,name[i],company_type,re7,company_status,re8)
+                        break
+                    
+                    elif street[i] in re4:
+                        if onewordname[i] in re1:                    
+                            append(company_title,re1,company_no,re2,company_name,name[i],company_type,re7,company_status,re8)
+                            break
+                            
+                        
+                elif onewordname[i] in re1:
+                    if lastword[i] in re1:
+                        append(company_title,re1,company_no,re2,company_name,name[i],company_type,re7,company_status,re8)
+                        break        
+                
+
+            else:
+                if onewordname[i] in re1:
+                    if firstword[i] in re1:
+                        if 'Bristol' in re6 or 'Banes' in re6 or 'Somerset' in re6 or 'Avon' in re6 or 'Dorset' in re6 or 'Radstock' in re6 or 'Chippenham' in re6 or 'Wells' in re6:
+                            append(company_title,re1,company_no,re2,company_name,name[i],company_type,re7,company_status,re8)   
+                            break                 
+    except:
+        if re3 == postcode[i]:
+            if onewordname[i] in re1:
+                append(company_title,re1,company_no,re2,company_name,name[i],company_type,re7,company_status,re8)
+                i +=1 
+            else:
+                continue
+        
+# Empty arrays for Officers DataFrame
+officer_name = [] # Empty array for officer names
+birth_year = [] # Empty array for birth years
+role = [] # Empty array for officer roles
+appointment_date = [] # Empty array for appointment dates
+occupation =[] # Empty array for officer occupations
+officer_company_name = [] # Empty array for officer company name
+officers = {'Company Name': officer_company_name,
+            'Officer Name': officer_name,
+            'Birth Year': birth_year,
+            'Role': role,
+            'Appointment Date': appointment_date,
+            'Occupation': occupation}
+
+# For loop to search officers using company numbers
+for j,n in enumerate(company_no): 
+    url_full1 = url2+str(n)+url3
+    res = rq.get(url_full1, auth=(api, '')).json()
+
+    
+    active = res['active_count']
+    for i in range(int(active)):
+        officer_company_name.append(company_title[j])
+        try:
+            re1 = res['items'][i]['name']
+            officer_name.append(re1)   
+        except: 
+            officer_name.append('No match')
+                
+        try:
+            re2 = res['items'][i]['date_of_birth']['year']
+            birth_year.append(re2)
+        except: 
+            birth_year.append('No match')
+            
+        try:
+            re3 = res['items'][i]['officer_role']
+            role.append(re3)  
+        except: 
+            role.append('No match')
+            
+        try:
+            re4 = res['items'][i]['appointed_on'] 
+            appointment_date.append(re4)
+        except: 
+            appointment_date.append('No match')
+            
+        try:
+            re5 = res['items'][i]['occupation']
+            occupation.append(re5)
+        except: 
+            occupation.append('No match')
+
+        
+# Empty array for PSC DataFrame
+psc_company_name = [] # PSC Company name
+psc_name = [] # PSC Name
+birth_year1 = [] # Birth year of PSC
+nationality = [] # Nationality of PSC
+residence = [] # Residence of PSC
+nature_of_control =[] # Nature of Control, ie share ownership
+kind = [] # Type of PSC, ie entity or corporation
+psc_search = {'Company Name': psc_company_name,
+              'PSC Name': psc_name,
+              'Birth Year': birth_year1,
+              'Nationality': nationality,
+              'Residence': residence,
+              'Nature of Control': nature_of_control,
+              'Individual/Entity': kind}
+
+# For loop to search PSC using company numbers
+for j,n in enumerate(company_no):
+    url_full2 = url2+str(n)+url4
+    resp = rq.get(url_full2, auth=(api, '')).json()
+        
+    try: 
+        active1 = resp['active_count']
+        for i in range(int(active1)):
+            psc_company_name.append(company_title[j])
+            try:
+                re1 = resp['items'][i]['name']
+                psc_name.append(re1)   
+            except: 
+                psc_name.append('No match')
+            try:
+                re2 = resp['items'][i]['date_of_birth']['year']
+                birth_year1.append(re2)
+            except: 
+                birth_year1.append('No match')
+            try:
+                re3 = resp['items'][i]['nationality']
+                nationality.append(re3)  
+            except: 
+                nationality.append('No match')
+            try:
+                re4 = resp['items'][i]['country_of_residence'] 
+                residence.append(re4)
+            except: 
+                residence.append('No match')
+            try:
+                re5 = resp['items'][i]['natures_of_control']
+                nature_of_control.append(re5)
+            except: 
+                nature_of_control.append('No match')
+            try:
+                re6 = resp['items'][i]['kind']
+                kind.append(re6)
+            except: 
+                kind.append('No match')
+
+    except:
+        for i in range(1):
+            psc_company_name.append(company_title[j])
+            try:
+                re1 = resp['items'][i]['name']
+                psc_name.append(re1)   
+            except: 
+                psc_name.append('No match')
+            try:
+                re2 = resp['items'][i]['date_of_birth']['year']
+                birth_year1.append(re2)
+            except: 
+                birth_year1.append('No match')
+            try:
+                re3 = resp['items'][i]['nationality']
+                nationality.append(re3)  
+            except: 
+                nationality.append('No match')
+            try:
+                re4 = resp['items'][i]['country_of_residence'] 
+                residence.append(re4)
+            except: 
+                residence.append('No match')
+            try:
+                re5 = resp['items'][i]['natures_of_control']
+                nature_of_control.append(re5)
+            except: 
+                nature_of_control.append('No match')
+            try:
+                re6 = resp['items'][i]['kind']
+                kind.append(re6)
+            except: 
+                kind.append('No match')
+
+# Empty arrays for corporations DataFrame
+corporations = [] # Corporation Names
+companyowned = [] # Corresponding company owned 
+corporation_name = [] # New array for Corporation Names DataFrame
+companyowned1 = [] # New array for Companies owned DataFrame       
+company_no1 = [] # Company number for Corporations
+company_type1 = [] # Corresponding Company type of corporations
+company_status1 = []
+
+# Loop to search through PSC 'Kind' Data and return corporations in new array
+for i,word in enumerate(kind):
+    if word == 'corporate-entity-person-with-significant-control':
+        corporations.append(psc_name[i])
+        companyowned.append(psc_company_name[i])
+
+corporation_search = {'Corporation Name': corporation_name,
+                      'Company Number': company_no1,
+                      'Company Owned': companyowned1,
+                      'Company Type': company_type1,
+                      'Company Status': company_status1}
+
+onewordcorp = [] # Array to display one word name for corporations
+
+for i in range(len(corporations)): # Create list of one words Corporation names
+    b = longestword(corporations[i]).upper()
+    onewordcorp.append(b)
+    onewordcorp[i].upper()
+
+# Loop to search Corporation data from API
+for i, w in enumerate(corporations):
+    
+    url_full3 = url+w+url1
+    respo = rq.get(url_full3, auth=(api, '')).json()
+
+    try:
+        for j in range(3): # for loop to return first 10 matches
+            re9 = respo['items'][j]['title']
+            re10 = respo['items'][j]['company_number'] 
+            re11 = respo['items'][j]['address']['locality']
+            re12 = respo['items'][j]['company_type']
+            re13 = respo['items'][j]['company_status']
+            
+            if 'Bath' in re11:
+                if onewordcorp[i] in re9:
+                    corporation_name.append(re9)
+                    company_no1.append(re10)
+                    companyowned1.append(companyowned[i])
+                    company_type1.append(re12)
+                    company_status1.append(re13)
+                    break
+                                            
+    except:
+        if onewordcorp[i] in re9:
+            corporation_name.append(re9)
+            company_no1.append(re10)
+            companyowned1.append(companyowned[i])
+            try:
+                company_type1.append(re12)
+            except:
+                company_type1.append('No Match')
+            try:
+                company_status1.append(re13)
+            except:
+                company_status1.append('No Match')
+                
+            continue
+            
+# Create DataFrames using results
+df1 = pd.DataFrame(record_search, columns = ['Original Company Name','Company Name Found','Company Number','Company Type','Company Status'])
+df2 = pd.DataFrame(officers, columns = ['Company Name','Officer Name','Birth Year','Role','Appointment Date','Occupation'])
+df3 = pd.DataFrame(psc_search, columns = ['Company Name','PSC Name','Birth Year','Nationality','Residence','Nature of Control','Individual/Entity'])
+df4 = pd.DataFrame(corporation_search, columns = ['Corporation Name','Company Number','Company Owned','Company Type','Company Status'])
+
+# Create a Pandas Excel writer using XlsxWriter as the engine.
+writer = pd.ExcelWriter(r'C:/Users/mthor/Documents/Testing1.xlsx', engine='xlsxwriter')
+
+# Convert the dataframe to an XlsxWriter Excel object.
+df1.to_excel(writer, sheet_name='Companies')
+df2.to_excel(writer, sheet_name='Officers')
+df3.to_excel(writer, sheet_name='PSCs')
+df4.to_excel(writer, sheet_name='Corporations')
+
+# Close the Pandas Excel writer and output the Excel file.
+writer.save()
+        
+        
+        
